@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>局域网提审 · 审核 · 交付</title>
+<style>
+  :root { --blue:#2f54eb; --green:#52c41a; --red:#ff4d4f; --bg:#f4f5f7; --line:#e8e8e8; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:#1f2329; }
+  header { background:linear-gradient(135deg,#2f54eb,#1d39c4); color:#fff; padding:18px 24px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  header h1 { font-size:18px; }
+  header .ws-pill { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.3); border-radius:16px; padding:4px 12px; font-size:12px; max-width:46vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
+  main { max-width:1080px; margin:0 auto; padding:18px 16px 80px; }
+  .card { background:#fff; border-radius:14px; padding:18px 20px; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+  .card > h2 { font-size:15px; display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+  .step-num { width:24px; height:24px; border-radius:50%; background:var(--blue); color:#fff; font-size:13px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .muted { color:#8a8f99; font-size:12.5px; line-height:1.7; }
+  .btn { border:none; border-radius:8px; padding:8px 16px; font-size:13.5px; cursor:pointer; background:var(--blue); color:#fff; font-family:inherit; }
+  .btn:hover { opacity:.9; }
+  .btn:disabled { background:#b9c4f0; cursor:not-allowed; }
+  .btn-ghost { background:#f0f0f0; color:#333; }
+  .btn-green { background:var(--green); }
+  .btn-red { background:var(--red); }
+  .btn-sm { padding:4px 10px; font-size:12px; }
+  input[type=text], input[type=date], textarea { border:1.5px solid #d9d9d9; border-radius:8px; padding:8px 12px; font:inherit; font-size:13.5px; outline:none; width:100%; }
+  input:focus, textarea:focus { border-color:var(--blue); }
+  .form-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+  .form-row > * { flex:1; min-width:140px; }
+  .tag { display:inline-block; font-size:11px; border-radius:6px; padding:2px 8px; }
+  .tag-on { background:#f6ffed; color:#389e0d; border:1px solid #b7eb8f; }
+  .tag-off { background:#f5f5f5; color:#8a8f99; border:1px solid #e0e0e0; }
+  .tag-warn { background:#fff7e6; color:#ad6800; border:1px solid #ffd591; }
+  .st-pending { color:#ad6800; } .st-reviewing { color:#0958d9; } .st-changes { color:#cf1322; } .st-approved { color:#389e0d; }
+  .list-row { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid #f0f0f0; font-size:13.5px; }
+  .list-row:last-child { border-bottom:none; }
+  .empty { text-align:center; color:#8a8f99; font-size:13px; padding:20px 10px; line-height:1.9; }
+  .err-banner { background:#fff1f0; border:1px solid #ffa39e; color:#cf1322; border-radius:10px; padding:10px 14px; font-size:13px; margin-bottom:12px; display:none; }
+  /* 弹窗 */
+  .modal-mask { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:50; display:none; align-items:center; justify-content:center; padding:20px; }
+  .modal { background:#fff; border-radius:14px; width:100%; max-width:560px; max-height:82vh; display:flex; flex-direction:column; overflow:hidden; }
+  .modal .m-head { padding:14px 18px; border-bottom:1px solid var(--line); font-size:15px; font-weight:600; display:flex; justify-content:space-between; align-items:center; }
+  .modal .m-body { padding:14px 18px; overflow-y:auto; }
+  .modal .m-foot { padding:12px 18px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:8px; }
+  .dir-item { padding:9px 10px; border-radius:8px; cursor:pointer; font-size:13.5px; display:flex; gap:8px; align-items:center; }
+  .dir-item:hover { background:#f0f5ff; }
+  .close-x { background:none; border:none; font-size:18px; cursor:pointer; color:#8a8f99; }
+  /* 文件选择 */
+  .file-check { display:flex; align-items:center; gap:10px; padding:8px 6px; border-radius:8px; font-size:13px; }
+  .file-check:hover { background:#f8f9ff; }
+  .file-check input { width:16px; height:16px; accent-color:var(--blue); flex-shrink:0; }
+  .drop-zone { border:2px dashed #c6d0f5; border-radius:12px; padding:20px; text-align:center; color:#5a6baf; font-size:13px; margin-bottom:12px; background:#fafbff; }
+  .drop-zone.over { background:#eef3ff; border-color:var(--blue); }
+  .progress { height:10px; background:#f0f0f0; border-radius:5px; overflow:hidden; margin:8px 0; }
+  .progress > div { height:100%; background:var(--blue); transition:width .4s; }
+  .version-head { cursor:pointer; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .version-head:hover .v-label { color:var(--blue); }
+  .comment-item { border-top:1px dashed #eee; padding:8px 0; font-size:13px; }
+  .qr-box { text-align:center; padding:8px; }
+  .pair-code-big { font-size:34px; font-weight:700; letter-spacing:6px; color:#1d39c4; font-family:ui-monospace,Menlo,monospace; }
+  .setup-wrap { max-width:640px; margin:8vh auto; }
+  .hint { background:#e6f4ff; border:1px solid #91caff; border-radius:10px; padding:10px 14px; font-size:12.5px; color:#0958d9; margin-bottom:12px; line-height:1.7; }
+  .warn-hint { background:#fff7e6; border:1px solid #ffd591; color:#ad6800; }
+  details { margin-top:6px; }
+  summary { cursor:pointer; font-size:12.5px; color:#5a6baf; }
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:760px){ .two-col{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 局域网提审 · 审核 · 交付</h1>
+  <span class="ws-pill" id="wsPill" onclick="openWorkspaceModal()" title="点击更换工作区">未设置工作区</span>
+  <span style="flex:1"></span>
+  <span class="muted" style="color:rgba(255,255,255,.75);font-size:12px" id="netInfo"></span>
+</header>
+
+<main id="mainRoot"></main>
+
+<!-- 工作区选择弹窗 -->
+<div class="modal-mask" id="wsModal">
+  <div class="modal">
+    <div class="m-head">选择工作区文件夹 <button class="close-x" onclick="closeModal('wsModal')">✕</button></div>
+    <div class="m-body">
+      <div class="hint">工作区是存放所有项目文件夹的地方。建议选择「文稿」或某个素材盘下的文件夹，系统会记住这个选择。</div>
+      <div class="muted" id="wsCurPath" style="margin-bottom:8px;word-break:break-all"></div>
+      <div id="wsBrowser"></div>
+    </div>
+    <div class="m-foot">
+      <button class="btn btn-ghost" onclick="closeModal('wsModal')">取消</button>
+      <button class="btn" id="wsPickBtn" onclick="pickWorkspace()">就选这个文件夹</button>
+    </div>
+  </div>
+</div>
+
+<!-- 通用信息弹窗 -->
+<div class="modal-mask" id="infoModal">
+  <div class="modal">
+    <div class="m-head" id="infoTitle">提示 <button class="close-x" onclick="closeModal('infoModal')">✕</button></div>
+    <div class="m-body" id="infoBody"></div>
+    <div class="m-foot" id="infoFoot"></div>
+  </div>
+</div>
+
+<script>
+/* ================= 全局状态 ================= */
+let S = { workspace:null, projects:[], devices:[], deliveries:[] };
+let serverInfo = null;
+let curProjectId = localStorage.getItem('curProjectId') || null;
+let checkedFiles = new Set(JSON.parse(localStorage.getItem('checkedFiles')||'[]'));
+let projectFiles = [];
+let wsBrowsePath = null;
+let activeDeliveryTimer = null;
+
+const $ = id => document.getElementById(id);
+function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fmt(n){ if(n==null) return '-'; if(n<1024) return n+' B'; if(n<1048576) return (n/1024).toFixed(1)+' KB'; if(n<1073741824) return (n/1048576).toFixed(1)+' MB'; return (n/1073741824).toFixed(2)+' GB'; }
+function fmtTime(t){ return new Date(t).toLocaleString('zh-CN',{hour12:false}); }
+function fmtTc(s){ s=Math.floor(s); return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+function statusText(s){ return {pending:'待审核',reviewing:'审核中',changes:'✗ 需要修改',approved:'✓ 已通过（可交付）'}[s]||s; }
+function kindIcon(k){ return {image:'🖼️',video:'🎬',audio:'🎵',pdf:'📄',text:'📝',office:'📊',archive:'🗜️',other:'📎'}[k]||'📎'; }
+function closeModal(id){ $(id).style.display='none'; }
+function openModal(id){ $(id).style.display='flex'; }
+function showInfo(title, bodyHtml, footHtml){
+  $('infoTitle').firstChild.textContent = title;
+  $('infoBody').innerHTML = bodyHtml;
+  $('infoFoot').innerHTML = footHtml || '<button class="btn" onclick="closeModal(\'infoModal\')">知道了</button>';
+  openModal('infoModal');
+}
+async function api(url, opts={}){
+  const r = await fetch(url, opts);
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok){ const e = new Error(j.error||('请求失败 '+r.status)); e.status = r.status; e.data = j; throw e; }
+  return j;
+}
+function post(url, body){ return api(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body||{})}); }
+
+/* ================= 状态刷新 ================= */
+async function refresh(silent){
+  try{
+    S = await api('/api/state');
+    if(!silent) render();
+  }catch(e){ /* 服务刚启动 */ }
+}
+async function boot(){
+  serverInfo = await api('/api/server-info').catch(()=>null);
+  if(serverInfo){
+    $('netInfo').textContent = '局域网地址：' + serverInfo.joinUrl.replace('/join','');
+  }
+  await refresh();
+  setInterval(async ()=>{ await refresh(true); renderDynamic(); }, 3000);
+}
+
+/* ================= 渲染 ================= */
+function render(){
+  const root = $('mainRoot');
+  $('wsPill').textContent = S.workspace ? ('📁 ' + S.workspace) : '未设置工作区';
+  if(!S.workspace){ renderSetup(root); return; }
+  const cur = S.projects.find(p=>p.id===curProjectId) || null;
+  root.innerHTML = `
+    ${renderWorkspaceCard()}
+    ${renderProjectCard(cur)}
+    ${cur ? renderFilesCard(cur) + renderDevicesCard() + renderSubmitCard(cur) + renderVersionsCard(cur) : ''}
+    ${renderDeliveriesCard()}`;
+  renderDynamic();
+  loadPairCode();
+  if(cur) loadProjectFiles(cur.id);
+}
+
+function renderSetup(root){
+  root.innerHTML = `
+  <div class="setup-wrap">
+    <div class="card" style="text-align:center;padding:36px 26px">
+      <div style="font-size:44px;margin-bottom:10px">🎬</div>
+      <h2 style="font-size:18px;margin-bottom:8px">欢迎使用 提审 · 审核 · 交付 工具</h2>
+      <div class="muted" style="margin-bottom:20px;line-height:2">
+        第一步：选一个文件夹作为<b>工作区</b>，以后所有项目都放在里面。<br>
+        你不需要知道程序安装在哪里，只管这个工作区文件夹就够了。
+      </div>
+      <button class="btn" style="padding:12px 28px;font-size:15px" onclick="openWorkspaceModal()">📁 选择工作区文件夹</button>
+    </div>
+  </div>`;
+}
+
+function renderWorkspaceCard(){
+  return `
+  <div class="card">
+    <h2><span class="step-num">1</span>工作区</h2>
+    <div class="list-row">
+      <span style="flex:1;word-break:break-all">📁 <b>${esc(S.workspace)}</b></span>
+      <button class="btn btn-ghost btn-sm" onclick="openFolder('${esc(S.workspace)}')">打开文件夹</button>
+      <button class="btn btn-ghost btn-sm" onclick="openWorkspaceModal()">更换</button>
+    </div>
+  </div>`;
+}
+
+function renderProjectCard(cur){
+  const today = new Date().toISOString().slice(0,10);
+  const others = S.projects.filter(p=>!cur || p.id!==cur.id);
+  return `
+  <div class="card">
+    <h2><span class="step-num">2</span>项目</h2>
+    ${cur ? `
+      <div class="list-row" style="background:#f0f5ff;border-radius:10px;padding:10px 12px">
+        <span style="flex:1">当前项目：<b>${esc(cur.folder)}</b></span>
+        <button class="btn btn-ghost btn-sm" onclick="openFolderPath(S.workspace + '/' + '${esc(cur.folder)}')">打开项目文件夹</button>
+        <button class="btn btn-ghost btn-sm" onclick="switchProject()">切换</button>
+      </div>` : `
+      <div class="hint">创建一个新项目，或在下方选择一个已有的项目文件夹继续工作。</div>
+      <div class="form-row">
+        <input type="date" id="pDate" value="${today}">
+        <input type="text" id="pBrand" placeholder="品牌（如：华为）">
+        <input type="text" id="pName" placeholder="项目名称（如：618主图视频）">
+      </div>
+      <div class="muted" id="projPreview" style="margin-bottom:10px">项目将保存在：${esc(S.workspace)}\\日期_品牌_项目名称</div>
+      <button class="btn" onclick="createProject()">✚ 创建项目</button>
+      <div id="adoptArea" style="margin-top:6px"></div>`}
+    ${cur && others.length ? `<details><summary>切换到其他项目（${others.length}）</summary>${others.map(p=>`
+      <div class="list-row"><span style="flex:1">📂 ${esc(p.folder)}</span>
+      <button class="btn btn-ghost btn-sm" onclick="setCurProject('${p.id}')">打开</button></div>`).join('')}</details>`:''}
+  </div>`;
+}
+
+function renderFilesCard(cur){
+  return `
+  <div class="card">
+    <h2><span class="step-num">3</span>选择待审文件 <span class="muted" style="font-weight:normal">（项目：${esc(cur.folder)}）</span></h2>
+    <div class="drop-zone" id="dropZone">
+      把要审核的文件拖到这里，或 <a href="javascript:document.getElementById('fileInput').click()">点击选择文件</a> 上传到项目文件夹<br>
+      <span class="muted">也可以直接打开项目文件夹，用电脑自带的方式把文件复制进去</span>
+      <input type="file" id="fileInput" multiple style="display:none" onchange="uploadFiles(this.files)">
+    </div>
+    <div id="fileList"><div class="empty">正在读取项目文件夹…</div></div>
+  </div>`;
+}
+
+function renderDevicesCard(){
+  const reviewers = S.devices.filter(d=>d.role==='reviewer');
+  const receivers = S.devices.filter(d=>d.role==='receiver');
+  const pending = S.devices.filter(d=>!d.approved);
+  return `
+  <div class="card">
+    <h2><span class="step-num">4</span>连接设备</h2>
+    <div class="two-col">
+      <div style="border:1px solid var(--line);border-radius:12px;padding:14px">
+        <b style="font-size:13.5px">📱 连接手机 / 笔记本（审核用）</b>
+        <div class="muted" style="margin:6px 0">设备与这台电脑连同一个 Wi-Fi，用浏览器扫码或打开地址，输入配对码：</div>
+        <div class="qr-box">
+          ${serverInfo && serverInfo.qr ? `<img src="${serverInfo.qr}" style="width:130px;height:130px"><br>` : ''}
+          <span class="muted">打开 <b>${esc(serverInfo?serverInfo.joinUrl:'')}</b></span><br>
+          <span class="muted">输入配对码：</span><br>
+          <span class="pair-code-big" id="pairCode">······</span><br>
+          <button class="btn btn-ghost btn-sm" onclick="refreshCode()">换一个配对码</button>
+        </div>
+      </div>
+      <div style="border:1px solid var(--line);border-radius:12px;padding:14px">
+        <b style="font-size:13.5px">💻 添加接收电脑（最终交付用）</b>
+        <div class="muted" style="margin:6px 0">在那台电脑上双击启动「接收端」，把它的页面上显示的地址填到这里：</div>
+        <div class="form-row" style="margin-top:8px">
+          <input type="text" id="recvAddr" placeholder="如：192.168.1.8:8700">
+        </div>
+        <button class="btn btn-sm" onclick="startRecvPair()">发起连接</button>
+        <div id="recvPairArea" style="margin-top:10px"></div>
+      </div>
+    </div>
+    ${pending.length ? `<div class="hint warn-hint" id="pendingDevices" style="margin-top:12px">⚠️ 有设备请求连接：${pending.map(d=>`
+      <span style="display:inline-flex;align-items:center;gap:8px;margin:4px 8px 0 0"><b>${esc(d.name)}</b>
+      <button class="btn btn-green btn-sm" onclick="approveDevice('${d.id}')">授权</button>
+      <button class="btn btn-red btn-sm" onclick="removeDevice('${d.id}')">拒绝</button></span>`).join('')}</div>` : ''}
+    <div style="margin-top:12px">
+      <b style="font-size:13px">已连接设备（${S.devices.filter(d=>d.approved).length}）</b>
+      <div id="deviceListLive"></div>
+    </div>
+  </div>`;
+}
+
+function deviceRow(d){
+  const roleText = d.role==='reviewer' ? '审核设备' : '接收电脑';
+  const on = d.online;
+  const extra = d.role==='receiver' && d.receiverInfo
+    ? ` · 保存到 ${esc(d.receiverInfo.saveDir)} · 剩余 ${fmt(d.receiverInfo.free)}` : '';
+  const err = d.role==='receiver' && !on && d.connectError ? ` · <span style="color:#cf1322">${esc(d.connectError)}</span>` : '';
+  return `<div class="list-row">
+    <span>${d.role==='reviewer'?'📱':'💻'}</span>
+    <span style="flex:1"><b>${esc(d.name)}</b> <span class="muted">${roleText}${extra}${err}</span></span>
+    <span class="tag ${on?'tag-on':'tag-off'}">${on?'● 在线':'○ 离线'}</span>
+    ${d.role==='receiver' && !on ? `<button class="btn btn-ghost btn-sm" onclick="reconnectReceiver('${d.id}')">重新连接</button>`:''}
+    <button class="btn btn-red btn-sm" onclick="removeDevice('${d.id}')">取消授权</button>
+  </div>`;
+}
+
+function renderSubmitCard(cur){
+  const reviewers = S.devices.filter(d=>d.role==='reviewer' && d.approved);
+  return `
+  <div class="card">
+    <h2><span class="step-num">5</span>提交审核</h2>
+    <div id="submitSummary"></div>
+    <div class="form-row" style="margin-top:10px">
+      <textarea id="versionNote" placeholder="给审核者捎句话（可选），如：这是初剪版本，重点看前 30 秒"></textarea>
+    </div>
+    <div style="margin:8px 0"><b style="font-size:13px">提交给哪些审核设备？</b></div>
+    ${reviewers.length ? reviewers.map(d=>`
+      <label class="file-check"><input type="checkbox" class="assignee" value="${d.id}" ${d.online?'checked':''}> 📱 ${esc(d.name)} <span class="tag ${d.online?'tag-on':'tag-off'}">${d.online?'在线':'离线'}</span></label>`).join('')
+      : '<div class="empty">还没有已授权的审核设备<br><span class="muted">请先在第 4 步用手机/笔记本扫码连接并授权</span></div>'}
+    <div style="margin-top:12px">
+      <button class="btn" style="padding:10px 24px" onclick="submitVersion()">🚀 提交为新版本</button>
+    </div>
+  </div>`;
+}
+
+function renderVersionsCard(cur){
+  const versions = (cur.versions||[]).slice().sort((a,b)=>b.createdAt-a.createdAt);
+  return `
+  <div class="card">
+    <h2><span class="step-num">6</span>版本与反馈</h2>
+    ${versions.length ? versions.map((v,i)=>`
+      <div style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px">
+        <div class="version-head" onclick="toggleVersion('${v.id}')">
+          <b class="v-label" style="font-size:15px">${v.label}</b>
+          <span class="tag ${i===0?'tag-on':'tag-off'}">${i===0?'当前版本':'历史版本'}</span>
+          <span class="st-${v.status}" style="font-size:13px">● ${statusText(v.status)}</span>
+          <span class="muted">${fmtTime(v.createdAt)} · ${v.files.length} 个文件 · 💬 ${v.commentCount}</span>
+          <span style="flex:1"></span>
+          ${v.status==='approved' ? `<button class="btn btn-green btn-sm" onclick="event.stopPropagation();openDelivery('${v.id}')">📦 正式交付</button>`:''}
+          <span class="muted">▼</span>
+        </div>
+        ${v.note?`<div class="muted" style="margin-top:4px">留言：${esc(v.note)}</div>`:''}
+        <div id="ver-${v.id}" style="display:none;margin-top:10px"></div>
+      </div>`).join('')
+    : '<div class="empty">还没有提交过版本<br><span class="muted">在第 3 步勾选文件、第 5 步点击「提交为新版本」，就会生成 V01</span></div>'}
+  </div>`;
+}
+
+function renderDeliveriesCard(){
+  const ds = S.deliveries || [];
+  return `
+  <div class="card">
+    <h2><span class="step-num">7</span>交付记录</h2>
+    <div id="deliveryLive"></div>
+    ${ds.length ? ds.map(d=>`
+      <div class="list-row" style="align-items:flex-start">
+        <span>📦</span>
+        <span style="flex:1">
+          <b>${esc(d.projectFolder)} · ${d.versionLabel}</b> → ${esc(d.receiverName)}
+          <div class="muted">${fmtTime(d.startedAt)} · ${d.files.filter(f=>f.status==='done').length}/${d.files.length} 个文件
+          ${d.savedTo?` · 已保存到：<b>${esc(d.savedTo)}</b>`:''}
+          ${d.error?` · <span style="color:#cf1322">${esc(d.error)}</span>`:''}</div>
+        </span>
+        <span class="tag ${d.status==='done'?'tag-on':d.status==='running'?'tag-warn':'tag-off'}" style="${d.status==='failed'?'color:#cf1322;border-color:#ffa39e;background:#fff1f0':''}">
+          ${d.status==='done'?'✓ 已交付':d.status==='running'?'传输中':'✗ 失败'}
+        </span>
+        ${d.status==='failed' ? `<button class="btn btn-sm" onclick="retryDelivery('${d.id}')">重新交付</button>`:''}
+      </div>`).join('')
+    : '<div class="empty">还没有交付记录</div>'}
+  </div>`;
+}
+
+/* 动态区域（轮询刷新，不打断用户输入） */
+function renderDynamic(){
+  if(!S.workspace) return;
+  $('wsPill').textContent = '📁 ' + S.workspace;
+  const dl = $('deviceListLive');
+  if(dl){
+    const approved = S.devices.filter(d=>d.approved);
+    dl.innerHTML = approved.length ? approved.map(deviceRow).join('') : '<div class="empty">暂无已授权设备</div>';
+  }
+  const hasPending = S.devices.some(d=>!d.approved);
+  const pendingShown = !!$('pendingDevices');
+  if(hasPending !== pendingShown){ render(); return; } // 有新配对请求时整页重绘
+  updateSubmitSummary();
+}
+
+/* ================= 工作区 ================= */
+async function openWorkspaceModal(){
+  openModal('wsModal');
+  const j = await api('/api/fs/roots');
+  wsBrowsePath = null;
+  $('wsBrowser').innerHTML = j.roots.map(r=>`<div class="dir-item" onclick="browseWs('${esc(r.path.replace(/\\/g,'\\\\'))}')">💽 ${esc(r.name)}</div>`).join('');
+  $('wsCurPath').textContent = '请选择一个位置';
+}
+async function browseWs(p){
+  try{
+    const j = await api('/api/fs/browse?path='+encodeURIComponent(p));
+    wsBrowsePath = j.path;
+    $('wsCurPath').textContent = '📂 ' + j.path;
+    let html = '';
+    if(j.parent && j.parent !== j.path) html += `<div class="dir-item" onclick="browseWs('${esc(j.parent.replace(/\\/g,'\\\\'))}')">⬅️ 返回上一级</div>`;
+    html += j.dirs.map(d=>`<div class="dir-item" onclick="browseWs('${esc(d.path.replace(/\\/g,'\\\\'))}')">📁 ${esc(d.name)}</div>`).join('');
+    $('wsBrowser').innerHTML = html || '<div class="empty">这个文件夹是空的，可以直接选它</div>';
+  }catch(e){ $('wsBrowser').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+async function pickWorkspace(){
+  if(!wsBrowsePath){ showInfo('提示','请先在列表里进入一个文件夹，再点「就选这个文件夹」。'); return; }
+  try{
+    await post('/api/workspace', { path: wsBrowsePath });
+    closeModal('wsModal');
+    curProjectId = null; checkedFiles.clear();
+    await refresh();
+  }catch(e){ showInfo('无法使用这个位置', esc(e.message)); }
+}
+async function openFolder(p){ await post('/api/open-folder',{path:p}).catch(e=>showInfo('打开失败',esc(e.message))); }
+async function openFolderPath(p){ await post('/api/open-folder',{path:p}).catch(()=>{}); }
+
+/* ================= 项目 ================= */
+function switchProject(){ curProjectId=null; localStorage.removeItem('curProjectId'); checkedFiles.clear(); render(); }
+function setCurProject(id){ curProjectId=id; localStorage.setItem('curProjectId',id); checkedFiles.clear(); render(); }
+
+async function createProject(){
+  const date=$('pDate').value, brand=$('pBrand').value.trim(), name=$('pName').value.trim();
+  if(!date||!brand||!name){ showInfo('信息不完整','日期、品牌、项目名称都要填写。'); return; }
+  try{
+    const j = await post('/api/projects',{date,brand,name});
+    curProjectId = j.project.id; localStorage.setItem('curProjectId',curProjectId);
+    checkedFiles.clear(); await refresh();
+  }catch(e){
+    if(e.status===409){
+      showInfo('已存在同名项目文件夹',
+        `<p style="font-size:13.5px;line-height:1.9">工作区里已经有 <b>${esc(e.data.folder||'')}</b> 这个文件夹了。<br>你要怎么做？</p>`,
+        `<button class="btn btn-ghost" onclick="closeModal('infoModal')">取消，改个名字</button>
+         <button class="btn" onclick="adoptFolder('${esc(e.data.folder||'')}')">打开这个已有项目</button>`);
+    } else showInfo('创建失败', esc(e.message));
+  }
+}
+async function adoptFolder(folder){
+  closeModal('infoModal');
+  try{
+    const j = await post('/api/projects/adopt',{folder});
+    curProjectId = j.project.id; localStorage.setItem('curProjectId',curProjectId);
+    checkedFiles.clear(); await refresh();
+  }catch(e){ showInfo('打开失败', esc(e.message)); }
+}
+
+/* ================= 文件 ================= */
+async function loadProjectFiles(pid){
+  try{
+    const j = await api('/api/projects/'+pid+'/files');
+    projectFiles = j.files;
+    const el = $('fileList'); if(!el) return;
+    if(!projectFiles.length){
+      el.innerHTML = '<div class="empty">项目文件夹还是空的<br><span class="muted">把要审核的文件上传到上面的虚线框，或打开项目文件夹复制进去，然后点下方刷新</span></div>'
+        + '<button class="btn btn-ghost btn-sm" onclick="loadProjectFiles(\''+pid+'\')">🔄 刷新列表</button>';
+      return;
+    }
+    el.innerHTML = projectFiles.map(f=>`
+      <label class="file-check">
+        <input type="checkbox" class="file-cb" value="${esc(f.relPath)}" ${checkedFiles.has(f.relPath)?'checked':''} onchange="toggleFile('${esc(f.relPath)}',this.checked)">
+        <span>${kindIcon(f.kind)}</span>
+        <span style="flex:1;word-break:break-all">${esc(f.relPath)}</span>
+        <span class="muted">${fmt(f.size)}</span>
+      </label>`).join('')
+      + '<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="loadProjectFiles(\''+pid+'\')">🔄 刷新列表</button></div>';
+    updateSubmitSummary();
+  }catch(e){ const el=$('fileList'); if(el) el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function toggleFile(rel, on){ on?checkedFiles.add(rel):checkedFiles.delete(rel); localStorage.setItem('checkedFiles',JSON.stringify([...checkedFiles])); updateSubmitSummary(); }
+async function uploadFiles(files){
+  if(!files.length || !curProjectId) return;
+  const fd = new FormData();
+  for(const f of files) fd.append('files', f);
+  showInfo('上传中', `<div class="muted">正在上传 ${files.length} 个文件到项目文件夹…</div>`, '');
+  try{
+    await fetch('/api/projects/'+curProjectId+'/upload',{method:'POST',body:fd}).then(async r=>{ const j=await r.json(); if(!r.ok) throw new Error(j.error||'上传失败'); });
+    closeModal('infoModal');
+    loadProjectFiles(curProjectId);
+  }catch(e){ showInfo('上传失败', esc(e.message)); }
+}
+function updateSubmitSummary(){
+  const el = $('submitSummary'); if(!el) return;
+  const picked = projectFiles.filter(f=>checkedFiles.has(f.relPath));
+  if(!picked.length){
+    el.innerHTML = '<div class="muted">还没勾选文件。勾选的文件会作为<b>下一个版本</b>的准确快照提交。</div>';
+    return;
+  }
+  const total = picked.reduce((s,f)=>s+f.size,0);
+  const cur = S.projects.find(p=>p.id===curProjectId);
+  const nextLabel = 'V' + String((cur?cur.versions.length:0)+1).padStart(2,'0');
+  el.innerHTML = `<div class="hint">本次将提交为 <b>${nextLabel}</b>：共 ${picked.length} 个文件，${fmt(total)}。
+    ${picked.slice(0,5).map(f=>`<br>${kindIcon(f.kind)} ${esc(f.name)} <span class="muted">${fmt(f.size)}</span>`).join('')}
+    ${picked.length>5?`<br><span class="muted">… 等 ${picked.length} 个文件</span>`:''}</div>`;
+}
+
+/* 拖拽上传 */
+document.addEventListener('dragover', e=>{ const z=$('dropZone'); if(z){ e.preventDefault(); z.classList.add('over'); } });
+document.addEventListener('dragleave', e=>{ const z=$('dropZone'); if(z && e.target===z) z.classList.remove('over'); });
+document.addEventListener('drop', e=>{ const z=$('dropZone'); if(z){ e.preventDefault(); z.classList.remove('over'); uploadFiles(e.dataTransfer.files); } });
+
+/* ================= 设备 ================= */
+async function loadPairCode(){
+  try{ const j = await api('/api/pairing/code'); const el=$('pairCode'); if(el) el.textContent = j.code; }catch(e){}
+}
+async function refreshCode(){ await post('/api/pairing/refresh'); loadPairCode(); }
+async function approveDevice(id){ await post('/api/devices/'+id+'/approve').catch(e=>showInfo('操作失败',esc(e.message))); await refresh(); }
+async function removeDevice(id){
+  showInfo('取消授权','<p style="font-size:13.5px">确定取消这台设备的授权吗？<br><span class="muted">取消后它不能再看审核任务或接收文件，之前的评论会保留。</span></p>',
+    `<button class="btn btn-ghost" onclick="closeModal('infoModal')">再想想</button>
+     <button class="btn btn-red" onclick="doRemoveDevice('${id}')">确定取消授权</button>`);
+}
+async function doRemoveDevice(id){
+  closeModal('infoModal');
+  await api('/api/devices/'+id,{method:'DELETE'}).catch(()=>{});
+  await refresh();
+}
+async function reconnectReceiver(id){ await refresh(); showInfo('重新连接','已重新探测，若仍显示离线：<br>1. 确认那台电脑上的「接收端」程序开着<br>2. 两台电脑在同一个 Wi-Fi 下<br>3. 必要时在那台电脑上重启接收端后，点上方「重新连接」。'); }
+
+let recvPair = null;
+async function startRecvPair(){
+  const addr = $('recvAddr').value.trim();
+  if(!addr){ showInfo('缺少地址','请先在接收电脑的页面上查看它的地址（形如 192.168.x.x:8700），填到这里。'); return; }
+  $('recvPairArea').innerHTML = '<div class="muted">正在连接对方…</div>';
+  try{
+    const j = await post('/api/receivers/pair',{addr});
+    recvPair = j;
+    $('recvPairArea').innerHTML = `
+      <div class="hint">✅ 已联系上对方。<br>请查看<b>接收电脑屏幕</b>上显示的 4 位确认码，填到这里：
+      <div class="form-row" style="margin-top:8px"><input type="text" id="recvCode" placeholder="4 位确认码" maxlength="4" style="max-width:160px"></div>
+      <button class="btn btn-sm" onclick="confirmRecvPair()">完成配对</button></div>`;
+  }catch(e){
+    $('recvPairArea').innerHTML = `<div class="hint warn-hint">❌ ${esc(e.message)}</div>`;
+  }
+}
+async function confirmRecvPair(){
+  const code = $('recvCode').value.trim();
+  if(!/^\d{4}$/.test(code)){ showInfo('确认码不对','确认码是接收电脑页面上显示的 4 位数字。'); return; }
+  try{
+    await post('/api/receivers/confirm',{addr:recvPair.addr, requestId:recvPair.requestId, code});
+    $('recvPairArea').innerHTML = '<div class="hint">🎉 配对成功！这台电脑已经可以作为接收设备。</div>';
+    await refresh();
+  }catch(e){ showInfo('配对失败', esc(e.message)); }
+}
+
+/* ================= 提交版本 ================= */
+async function submitVersion(){
+  if(!curProjectId) return;
+  const files = [...checkedFiles];
+  if(!files.length){ showInfo('还没选文件','请先回到第 3 步，勾选本次要审核的文件。'); return; }
+  const assignees = [...document.querySelectorAll('.assignee:checked')].map(x=>x.value);
+  if(!assignees.length){ showInfo('还没选审核设备','请勾选至少一台已授权的审核设备。'); return; }
+  const note = $('versionNote').value;
+  try{
+    const j = await post('/api/versions',{projectId:curProjectId, files, note, assignees});
+    checkedFiles.clear(); localStorage.removeItem('checkedFiles');
+    await refresh();
+    showInfo('提交成功 🎉', `<p style="font-size:13.5px;line-height:1.9"><b>${j.version.label}</b> 已生成并锁定。<br>审核设备上现在能看到这个版本了；<br>即使你继续修改工作区里的文件，${j.version.label} 也不会变。</p>`);
+  }catch(e){ showInfo('提交失败', esc(e.message)); }
+}
+
+/* ================= 版本详情/反馈 ================= */
+const openVersions = new Set();
+async function toggleVersion(vid){
+  const box = $('ver-'+vid);
+  if(!box) return;
+  if(box.style.display==='block'){ box.style.display='none'; return; }
+  box.style.display='block';
+  box.innerHTML = '<div class="muted">加载反馈…</div>';
+  try{
+    const j = await api('/api/versions/'+vid);
+    const v = j.version;
+    box.innerHTML = v.files.map(f=>{
+      const cs = j.comments.filter(c=>c.fileId===f.id);
+      return `<div style="border-top:1px solid #f0f0f0;padding:8px 0">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap">
+          <span>${kindIcon(f.kind)}</span><span style="flex:1;word-break:break-all">${esc(f.relPath)}</span>
+          <span class="muted">${fmt(f.size)}</span>
+          ${f.review?`<span class="st-${f.review.status==='approved'?'approved':'changes'}" style="font-size:12px">${f.review.status==='approved'?'✓ 已通过':'✗ 需要修改'}（${esc(f.review.by)}）</span>`:'<span class="muted">未审核</span>'}
+        </div>
+        ${cs.map(c=>`<div class="comment-item">
+          <span class="muted">${esc(c.author)} · ${fmtTime(c.createdAt)}${c.timecode!=null?` · ⏱ ${fmtTc(c.timecode)}`:''}</span><br>${esc(c.text)}
+        </div>`).join('')}
+      </div>`;
+    }).join('') || '<div class="empty">暂无文件</div>';
+  }catch(e){ box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
+/* ================= 交付 ================= */
+async function openDelivery(vid){
+  const receivers = S.devices.filter(d=>d.role==='receiver' && d.approved);
+  const online = receivers.filter(d=>d.online);
+  if(!receivers.length){
+    showInfo('还没有接收电脑','请先在第 4 步右侧添加一台接收电脑（在那台电脑上启动「接收端」程序）。'); return;
+  }
+  if(!online.length){
+    showInfo('接收电脑都不在线','请确认接收电脑上的「接收端」程序已启动、两台电脑在同一个 Wi-Fi 下，然后再试。'); return;
+  }
+  const v = S.projects.flatMap(p=>p.versions).find(x=>x.id===vid);
+  showInfo('确认正式交付',
+    `<p style="font-size:13.5px;line-height:2">把 <b>${esc(v? v.label:'')}</b>（${v?v.files.length:0} 个文件，${fmt(v?v.files.reduce((s,f)=>s+f.size,0):0)}）正式交付到：</p>
+     <div style="margin:10px 0">${online.map(d=>`<label class="file-check"><input type="radio" name="dlRecv" value="${d.id}"> 💻 <b>${esc(d.name)}</b> <span class="muted">${d.receiverInfo?('保存到 '+esc(d.receiverInfo.saveDir)):''}</span></label>`).join('')}</div>
+     <p class="muted">交付的是当时提交的准确版本，即使工作区文件后来改过也不受影响。</p>`,
+    `<button class="btn btn-ghost" onclick="closeModal('infoModal')">取消</button>
+     <button class="btn btn-green" onclick="startDelivery('${vid}')">确认交付</button>`);
+}
+async function startDelivery(vid){
+  const sel = document.querySelector('input[name=dlRecv]:checked');
+  if(!sel){ showInfo('选一台接收电脑','请选择一台在线的接收电脑。'); return; }
+  closeModal('infoModal');
+  try{
+    const j = await post('/api/deliveries',{versionId:vid, receiverId:sel.value});
+    await refresh();
+    watchDelivery(j.delivery.id);
+  }catch(e){ showInfo('无法交付', esc(e.message)); }
+}
+function watchDelivery(did){
+  clearInterval(activeDeliveryTimer);
+  activeDeliveryTimer = setInterval(async ()=>{
+    try{
+      const j = await api('/api/deliveries/'+did);
+      const d = j.delivery;
+      const done = d.files.filter(f=>f.status==='done').length;
+      const totalBytes = d.files.reduce((s,f)=>s+f.size,0);
+      const doneBytes = d.files.filter(f=>f.status==='done').reduce((s,f)=>s+f.size,0) + (d.live?d.live.currentBytes:0);
+      const pct = totalBytes>0?Math.min(100,Math.round(doneBytes/totalBytes*100)):0;
+      const el = $('deliveryLive');
+      if(el) el.innerHTML = `<div class="hint">📡 正在交付到 <b>${esc(d.receiverName)}</b>：${esc(d.live?d.live.currentFile:'准备中…')}（${done}/${d.files.length} 个文件）
+        <div class="progress"><div style="width:${pct}%"></div></div><span class="muted">${fmt(doneBytes)} / ${fmt(totalBytes)} · ${pct}%</span></div>`;
+      if(d.status!=='running'){
+        clearInterval(activeDeliveryTimer);
+        await refresh();
+        if(d.status==='done') showInfo('交付完成 ✅', `<p style="font-size:13.5px;line-height:2">${d.files.length} 个文件已全部送达 <b>${esc(d.receiverName)}</b>。<br>保存位置：<b>${esc(d.savedTo||'对方默认目录')}</b><br>两端交付记录里都能查到这次交付。</p>`);
+        else showInfo('交付失败', `<p style="font-size:13.5px;line-height:1.9">${esc(d.error||'未知原因')}<br><br>可以到页面底部「交付记录」里点「重新交付」。</p>`);
+      }
+    }catch(e){ /* 服务抖动，下一轮再试 */ }
+  }, 800);
+}
+async function retryDelivery(did){
+  try{ await post('/api/deliveries/'+did+'/retry'); await refresh(); watchDelivery(did); }
+  catch(e){ showInfo('无法重新交付', esc(e.message)); }
+}
+
+/* ================= 启动 ================= */
+setInterval(loadPairCode, 30000);
+setTimeout(loadPairCode, 600);
+boot();
+</script>
+</body>
+</html>

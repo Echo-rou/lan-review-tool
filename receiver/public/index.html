@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>提审交付 · 接收端</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:#f4f5f7; color:#1f2329; min-height:100vh; }
+  .wrap { max-width:720px; margin:0 auto; padding:28px 16px 60px; }
+  .hero { background:linear-gradient(135deg,#2f54eb,#1d39c4); color:#fff; border-radius:16px; padding:24px; margin-bottom:18px; }
+  .hero h1 { font-size:20px; margin-bottom:6px; }
+  .hero p { font-size:13px; opacity:.85; line-height:1.7; }
+  .addr { display:inline-block; background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.35); border-radius:8px; padding:6px 12px; font-family:ui-monospace,Menlo,monospace; font-size:15px; margin:6px 8px 0 0; }
+  .card { background:#fff; border-radius:14px; padding:18px 20px; margin-bottom:14px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+  .card h2 { font-size:15px; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:#52c41a; display:inline-block; }
+  .muted { color:#8a8f99; font-size:12.5px; line-height:1.7; }
+  .pair-box { background:#fff7e6; border:1px solid #ffd591; border-radius:12px; padding:16px; text-align:center; margin-bottom:14px; }
+  .pair-code { font-size:36px; font-weight:700; letter-spacing:8px; color:#d46b08; font-family:ui-monospace,Menlo,monospace; }
+  select,button { font:inherit; }
+  select { padding:8px 10px; border:1px solid #d9d9d9; border-radius:8px; width:100%; margin:6px 0 10px; background:#fff; }
+  button { border:none; border-radius:8px; padding:9px 16px; cursor:pointer; font-size:13.5px; background:#2f54eb; color:#fff; }
+  button.ghost { background:#f0f0f0; color:#333; }
+  button:hover { opacity:.9; }
+  .row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid #f0f0f0; font-size:13.5px; }
+  .row:last-child { border-bottom:none; }
+  .tag { font-size:11px; border-radius:6px; padding:2px 8px; }
+  .tag.ok { background:#f6ffed; color:#389e0d; border:1px solid #b7eb8f; }
+  .tag.bad { background:#fff1f0; color:#cf1322; border:1px solid #ffa39e; }
+  .tag.ing { background:#e6f4ff; color:#0958d9; border:1px solid #91caff; }
+  .progress { height:8px; background:#f0f0f0; border-radius:4px; overflow:hidden; margin-top:8px; }
+  .progress > div { height:100%; background:#2f54eb; transition:width .3s; }
+  .empty { text-align:center; color:#8a8f99; font-size:13px; padding:18px 0; }
+  code { background:#f0f0f0; padding:1px 6px; border-radius:4px; font-size:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <h1>📥 提审交付 · 接收端</h1>
+    <p>保持本页面和程序开着，创作者电脑就能把「审核通过」的版本正式交付到这台电脑。<br>把下面的地址告诉创作者，让他/她在创作者页面里添加接收电脑：</p>
+    <div id="addrs"></div>
+  </div>
+
+  <div id="pairArea"></div>
+
+  <div class="card">
+    <h2><span class="dot"></span>运行状态</h2>
+    <div class="row"><span>本机名称</span><b id="devName">-</b></div>
+    <div class="row"><span>文件保存位置</span><span id="saveDir" style="word-break:break-all;text-align:right">-</span></div>
+    <div class="row"><span>磁盘剩余空间</span><b id="free">-</b></div>
+    <div style="margin-top:10px">
+      <label class="muted">更改保存位置：</label>
+      <select id="locSelect"></select>
+      <div style="display:flex;gap:8px">
+        <button onclick="changeDir()">保存位置设置</button>
+        <button class="ghost" onclick="openDir()">打开当前文件夹</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🔗 已配对的创作者电脑</h2>
+    <div id="creators"><div class="empty">还没有配对的创作者电脑</div></div>
+  </div>
+
+  <div class="card">
+    <h2>📦 交付记录</h2>
+    <div id="liveArea"></div>
+    <div id="records"><div class="empty">还没有交付记录</div></div>
+  </div>
+</div>
+
+<script>
+let locations = [];
+function fmt(n){ if(n==null) return '未知'; if(n<1024) return n+' B'; if(n<1048576) return (n/1024).toFixed(1)+' KB'; if(n<1073741824) return (n/1048576).toFixed(1)+' MB'; return (n/1073741824).toFixed(2)+' GB'; }
+function fmtTime(t){ return new Date(t).toLocaleString('zh-CN',{hour12:false}); }
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function load(){
+  try{
+    const s = await (await fetch('/api/local/state')).json();
+    document.getElementById('devName').textContent = s.deviceName;
+    document.getElementById('saveDir').textContent = s.saveDir;
+    document.getElementById('free').textContent = s.free==null?'未知':fmt(s.free);
+    document.getElementById('addrs').innerHTML = s.addresses.map(a=>`<span class="addr">${esc(a.url)}</span>`).join('') || '<span class="addr">未检测到局域网地址</span>';
+
+    // 配对请求
+    const pa = document.getElementById('pairArea');
+    if(s.pendingPairs.length){
+      pa.innerHTML = s.pendingPairs.map(p=>`
+        <div class="pair-box">
+          <div style="font-size:14px;margin-bottom:6px">💻 <b>${esc(p.name)}</b> 请求连接这台电脑</div>
+          <div class="muted">请对方在创作者页面输入下面的确认码：</div>
+          <div class="pair-code">${p.code}</div>
+        </div>`).join('');
+    } else if(pa.dataset.had){ pa.innerHTML=''; delete pa.dataset.had; }
+    if(s.pendingPairs.length) pa.dataset.had='1';
+
+    // 已配对
+    document.getElementById('creators').innerHTML = s.creators.length
+      ? s.creators.map(c=>`<div class="row"><span>💻 ${esc(c.name)}</span><span><span class="tag ok">已授权</span> <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="unpair('${esc(c.name)}')">取消授权</button></span></div>`).join('')
+      : '<div class="empty">还没有配对的创作者电脑</div>';
+
+    // 进行中
+    const liveIds = Object.keys(s.live||{});
+    document.getElementById('liveArea').innerHTML = liveIds.map(id=>{
+      const l = s.live[id];
+      const pct = l.total>0 ? Math.min(100, Math.round(l.received/l.total*100)) : 0;
+      return `<div style="background:#e6f4ff;border-radius:10px;padding:12px;margin-bottom:10px">
+        <div style="font-size:13px">📡 正在接收：<b>${esc(l.currentFile||'准备中…')}</b></div>
+        <div class="progress"><div style="width:${pct}%"></div></div>
+        <div class="muted" style="margin-top:4px">${fmt(l.received)} / ${fmt(l.total)}（${pct}%）</div>
+      </div>`;
+    }).join('');
+
+    // 记录
+    document.getElementById('records').innerHTML = s.records.length
+      ? s.records.map(r=>`
+        <div class="row">
+          <div>
+            <div><b>${esc(r.projectFolder)}</b> · <b>${esc(r.versionLabel)}</b> <span class="muted">来自 ${esc(r.creatorName||'')}</span></div>
+            <div class="muted">${fmtTime(r.startedAt)} · ${r.files.length} 个文件${r.savedTo?(' · 存于 '+esc(r.savedTo)):''}${r.error?(' · '+esc(r.error)):''}</div>
+          </div>
+          <span class="tag ${r.status==='done'?'ok':r.status==='receiving'?'ing':'bad'}">${r.status==='done'?'✓ 已完成':r.status==='receiving'?'接收中':'✗ 失败'}</span>
+        </div>`).join('')
+      : '<div class="empty">还没有交付记录</div>';
+  }catch(e){ /* 服务还没起来 */ }
+}
+
+async function loadLocations(){
+  const r = await (await fetch('/api/local/save-locations')).json();
+  locations = r.locations;
+  const sel = document.getElementById('locSelect');
+  sel.innerHTML = locations.map(l=>`<option value="${esc(l.path)}">${esc(l.name)}</option>`).join('');
+}
+
+async function changeDir(){
+  const v = document.getElementById('locSelect').value;
+  const r = await (await fetch('/api/local/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({saveDir:v})})).json();
+  alert(r.error ? ('设置失败：'+r.error) : ('保存位置已更改为：\n'+r.saveDir));
+  load();
+}
+async function openDir(){ await fetch('/api/local/open-save-dir',{method:'POST'}); }
+async function unpair(name){
+  if(!confirm('确定取消「'+name+'」的授权吗？取消后对方不能再向这台电脑交付文件。')) return;
+  await fetch('/api/local/unpair',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name})});
+  load();
+}
+
+loadLocations(); load(); setInterval(load, 2000);
+</script>
+</body>
+</html>

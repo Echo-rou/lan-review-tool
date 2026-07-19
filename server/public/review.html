@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>审核任务</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:#f4f5f7; color:#1f2329; }
+  .topbar { position:sticky; top:0; z-index:20; background:#2f54eb; color:#fff; padding:calc(10px + env(safe-area-inset-top)) 16px 12px; display:flex; align-items:center; gap:10px; }
+  .topbar h1 { font-size:16px; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .topbar .back { background:rgba(255,255,255,.18); border:none; color:#fff; border-radius:8px; padding:6px 12px; font-size:13px; cursor:pointer; }
+  .wrap { max-width:860px; margin:0 auto; padding:14px 12px 90px; }
+  .card { background:#fff; border-radius:12px; padding:14px 16px; margin-bottom:12px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+  .task-title { font-size:15px; font-weight:600; margin-bottom:4px; word-break:break-all; }
+  .muted { color:#8a8f99; font-size:12px; line-height:1.6; }
+  .tag { display:inline-block; font-size:11px; border-radius:6px; padding:2px 8px; margin-left:6px; vertical-align:middle; }
+  .tag.cur { background:#e6f4ff; color:#0958d9; border:1px solid #91caff; }
+  .tag.hist { background:#f5f5f5; color:#8a8f99; border:1px solid #e0e0e0; }
+  .st-pending { color:#ad6800; } .st-reviewing { color:#0958d9; } .st-changes { color:#cf1322; } .st-approved { color:#389e0d; }
+  .file-row { display:flex; align-items:center; gap:10px; padding:12px 2px; border-bottom:1px solid #f0f0f0; cursor:pointer; }
+  .file-row:last-child { border-bottom:none; }
+  .file-icon { font-size:22px; width:30px; text-align:center; flex-shrink:0; }
+  .file-meta { flex:1; min-width:0; }
+  .file-name { font-size:14px; word-break:break-all; }
+  .file-sub { font-size:11.5px; color:#8a8f99; margin-top:2px; }
+  .mark-pill { font-size:11px; border-radius:10px; padding:2px 8px; flex-shrink:0; }
+  .mark-pill.ok { background:#f6ffed; color:#389e0d; }
+  .mark-pill.bad { background:#fff1f0; color:#cf1322; }
+  .preview-box { background:#000; border-radius:10px; overflow:hidden; margin-bottom:12px; min-height:120px; display:flex; align-items:center; justify-content:center; }
+  .preview-box img, .preview-box video { width:100%; max-height:62vh; display:block; }
+  .preview-box audio { width:100%; }
+  .preview-box iframe { width:100%; height:62vh; border:none; background:#fff; }
+  .text-preview { background:#fff; color:#222; width:100%; max-height:62vh; overflow:auto; padding:14px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12.5px; white-space:pre-wrap; word-break:break-all; }
+  .nopreview { background:#fff; width:100%; padding:26px 16px; text-align:center; }
+  .nopreview .big { font-size:40px; margin-bottom:8px; }
+  .btn { border:none; border-radius:10px; padding:11px 16px; font-size:14px; cursor:pointer; }
+  .btn-primary { background:#2f54eb; color:#fff; }
+  .btn-ok { background:#52c41a; color:#fff; flex:1; }
+  .btn-bad { background:#ff4d4f; color:#fff; flex:1; }
+  .btn-ghost { background:#f0f0f0; color:#333; }
+  .mark-row { display:flex; gap:10px; margin:12px 0; }
+  .comment { border-top:1px solid #f0f0f0; padding:10px 0; }
+  .comment .head { font-size:12px; color:#8a8f99; margin-bottom:3px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .comment .body { font-size:14px; line-height:1.6; word-break:break-all; }
+  .tc-link { color:#0958d9; background:#e6f4ff; border:none; border-radius:6px; padding:2px 8px; font-size:12px; cursor:pointer; }
+  textarea { width:100%; border:1.5px solid #d9d9d9; border-radius:10px; padding:10px 12px; font:inherit; font-size:14px; resize:vertical; min-height:70px; outline:none; }
+  textarea:focus { border-color:#2f54eb; }
+  .comment-form { margin-top:12px; display:flex; flex-direction:column; gap:8px; }
+  .empty { text-align:center; color:#8a8f99; padding:50px 20px; font-size:14px; line-height:2; }
+  .toast { position:fixed; left:50%; bottom:80px; transform:translateX(-50%); background:rgba(0,0,0,.78); color:#fff; padding:10px 18px; border-radius:20px; font-size:13.5px; z-index:99; display:none; }
+  .version-note { background:#fffbe6; border:1px solid #ffe58f; border-radius:8px; padding:8px 12px; font-size:12.5px; color:#614700; margin-bottom:12px; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <button class="back" id="backBtn" onclick="goBack()" style="display:none">‹ 返回</button>
+  <h1 id="title">审核任务</h1>
+</div>
+<div class="wrap" id="app"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const token = localStorage.getItem('reviewToken');
+if (!token) location.href = '/join';
+const H = { 'x-device-token': token };
+let view = { name: 'tasks', versionId: null, fileId: null };
+let tasks = [], curDetail = null, videoEl = null;
+
+function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fmt(n){ if(n<1024) return n+' B'; if(n<1048576) return (n/1024).toFixed(1)+' KB'; if(n<1073741824) return (n/1048576).toFixed(1)+' MB'; return (n/1073741824).toFixed(2)+' GB'; }
+function fmtTime(t){ return new Date(t).toLocaleString('zh-CN',{hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}); }
+function fmtTc(s){ s=Math.floor(s); const m=Math.floor(s/60), sec=s%60; return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0'); }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._x); t._x=setTimeout(()=>t.style.display='none',2200); }
+function statusText(s){ return {pending:'待审核',reviewing:'审核中',changes:'需要修改',approved:'✓ 已通过'}[s]||s; }
+function kindIcon(k){ return {image:'🖼️',video:'🎬',audio:'🎵',pdf:'📄',text:'📝',office:'📊',archive:'🗜️',other:'📎'}[k]||'📎'; }
+
+async function api(url, opts={}){
+  const r = await fetch(url, { ...opts, headers: { ...H, ...(opts.headers||{}) } });
+  if (r.status === 401 || r.status === 403) { localStorage.removeItem('reviewToken'); location.href='/join'; throw new Error('unauthorized'); }
+  const j = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(j.error || ('请求失败 '+r.status));
+  return j;
+}
+
+function setTitle(t, back){
+  document.getElementById('title').textContent = t;
+  document.getElementById('backBtn').style.display = back ? 'block' : 'none';
+}
+function goBack(){
+  if (view.name === 'file') { view = { name:'version', versionId: view.versionId }; renderVersion(); }
+  else if (view.name === 'version') { view = { name:'tasks' }; renderTasks(); }
+}
+
+/* ---------- 任务列表 ---------- */
+async function renderTasks(){
+  setTitle('审核任务', false);
+  const app = document.getElementById('app');
+  try{
+    const j = await api('/api/review/tasks');
+    tasks = j.tasks;
+    if(!tasks.length){
+      app.innerHTML = '<div class="empty">📭<br>暂时没有分配给你的审核任务<br><span class="muted">创作者提交新版本后，这里会自动出现</span></div>';
+      return;
+    }
+    app.innerHTML = tasks.map(t=>`
+      <div class="card" onclick="openVersion('${t.id}')">
+        <div class="task-title">${esc(t.projectName)} · ${t.label}
+          <span class="tag ${t.isCurrent?'cur':'hist'}">${t.isCurrent?'当前版本':'历史版本'}</span>
+        </div>
+        <div class="muted">${fmtTime(t.createdAt)} 提交 · ${t.files.length} 个文件 · ${t.commentCount} 条评论</div>
+        ${t.note?`<div class="version-note" style="margin:8px 0 0">创作者留言：${esc(t.note)}</div>`:''}
+        <div style="margin-top:8px;font-size:13px" class="st-${t.status}">● ${statusText(t.status)}</div>
+      </div>`).join('');
+  }catch(e){
+    app.innerHTML = `<div class="empty">加载失败：${esc(e.message)}<br><button class="btn btn-primary" style="margin-top:12px" onclick="renderTasks()">重试</button></div>`;
+  }
+}
+
+/* ---------- 版本详情 ---------- */
+async function openVersion(id){ view = { name:'version', versionId:id }; renderVersion(); }
+async function renderVersion(){
+  setTitle('加载中…', true);
+  const app = document.getElementById('app');
+  try{
+    curDetail = await api('/api/review/versions/'+view.versionId);
+    const v = curDetail.version;
+    setTitle(curDetail.projectName + ' · ' + v.label, true);
+    app.innerHTML = `
+      ${v.note?`<div class="version-note">创作者留言：${esc(v.note)}</div>`:''}
+      <div class="card">
+        <div style="font-size:13px;margin-bottom:4px" class="st-${v.status}">● ${statusText(v.status)} <span class="muted">· ${fmtTime(v.createdAt)} 提交</span></div>
+        ${v.files.map(f=>`
+          <div class="file-row" onclick="openFile('${f.id}')">
+            <div class="file-icon">${kindIcon(f.kind)}</div>
+            <div class="file-meta">
+              <div class="file-name">${esc(f.name)}</div>
+              <div class="file-sub">${fmt(f.size)}${f.commentCount?(' · 💬 '+f.commentCount):''}</div>
+            </div>
+            ${f.review?`<span class="mark-pill ${f.review.status==='approved'?'ok':'bad'}">${f.review.status==='approved'?'✓ 已通过':'需修改'}</span>`:'<span class="mark-pill" style="background:#f5f5f5;color:#8a8f99">未审</span>'}
+          </div>`).join('')}
+      </div>
+      <div class="muted" style="text-align:center">点击文件开始审核 · 可逐个预览并标记</div>`;
+  }catch(e){
+    app.innerHTML = `<div class="empty">加载失败：${esc(e.message)}<br><button class="btn btn-primary" style="margin-top:12px" onclick="renderVersion()">重试</button></div>`;
+  }
+}
+
+/* ---------- 文件预览 + 评论 + 标记 ---------- */
+async function openFile(fid){ view = { ...view, name:'file', fileId:fid }; renderFile(); }
+async function renderFile(){
+  const v = curDetail.version;
+  const f = v.files.find(x=>x.id===view.fileId);
+  if(!f) return goBack();
+  setTitle(f.name, true);
+  const fileUrl = '/api/review/file/'+v.id+'/'+f.id+'?token='+encodeURIComponent(token);
+  const dlUrl = '/api/review/download/'+v.id+'/'+f.id+'?token='+encodeURIComponent(token);
+  const comments = curDetail.comments.filter(c=>c.fileId===f.id);
+
+  let preview = '';
+  if (f.kind === 'image') preview = `<img src="${fileUrl}" alt="">`;
+  else if (f.kind === 'video') preview = `<video id="vPlayer" controls playsinline preload="metadata" src="${fileUrl}"></video>`;
+  else if (f.kind === 'audio') preview = `<audio controls src="${fileUrl}" style="width:100%"></audio>`;
+  else if (f.kind === 'pdf') preview = `<iframe src="${fileUrl}"></iframe>`;
+  else if (f.kind === 'text') preview = `<div class="text-preview" id="textPrev">加载中…</div>`;
+  else preview = `<div class="nopreview">
+      <div class="big">${kindIcon(f.kind)}</div>
+      <div style="font-size:14px;font-weight:600;word-break:break-all">${esc(f.name)}</div>
+      <div class="muted" style="margin:6px 0 14px">${fmt(f.size)} · 此类型无法在浏览器中直接预览</div>
+      <a class="btn btn-primary" style="text-decoration:none;display:inline-block" href="${dlUrl}">下载到本机查看</a>
+    </div>`;
+
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="preview-box">${preview}</div>
+    <div class="mark-row">
+      <button class="btn btn-bad" onclick="mark('changes')">✗ 需要修改</button>
+      <button class="btn btn-ok" onclick="mark('approved')">✓ 审核通过</button>
+    </div>
+    <div class="muted" style="text-align:center;margin-bottom:10px" id="myMark">${f.review?('我的标记：'+(f.review.status==='approved'?'✓ 审核通过':'✗ 需要修改')):'还没有标记这个文件'}</div>
+    <div class="card">
+      <div style="font-size:14px;font-weight:600;margin-bottom:8px">💬 评论（${comments.length}）</div>
+      <div id="commentList">
+        ${comments.length ? comments.map(c=>`
+          <div class="comment">
+            <div class="head">
+              <b>${esc(c.author)}</b> · ${fmtTime(c.createdAt)}
+              ${c.timecode!=null?`<button class="tc-link" onclick="seekTo(${c.timecode})">▶ ${fmtTc(c.timecode)}</button>`:''}
+            </div>
+            <div class="body">${esc(c.text)}</div>
+          </div>`).join('') : '<div class="muted" style="padding:6px 0">还没有评论，来说点什么吧</div>'}
+      </div>
+      <div class="comment-form">
+        <textarea id="commentText" placeholder="写下对这个文件的意见…"></textarea>
+        ${f.kind==='video'?'<button class="btn btn-ghost" id="tcBtn" onclick="addTcComment()">⏱ 在视频当前位置添加评论</button>':''}
+        <button class="btn btn-primary" onclick="addComment(null)">发表评论</button>
+      </div>
+    </div>`;
+
+  if (f.kind === 'text') {
+    try{
+      const r = await fetch(fileUrl, { headers: H });
+      const t = await r.text();
+      document.getElementById('textPrev').textContent = t.slice(0, 200000) || '（空文件）';
+    }catch{ document.getElementById('textPrev').textContent = '文本内容加载失败'; }
+  }
+  if (f.kind === 'video') videoEl = document.getElementById('vPlayer');
+  window.scrollTo(0,0);
+}
+
+function seekTo(sec){
+  if (videoEl) { videoEl.currentTime = sec; videoEl.play(); window.scrollTo({top:0,behavior:'smooth'}); }
+}
+
+async function addComment(tc){
+  const text = document.getElementById('commentText').value.trim();
+  if(!text) return toast('评论内容不能为空');
+  try{
+    const j = await api('/api/review/comments', {
+      method:'POST', headers:{'content-type':'application/json'},
+      body: JSON.stringify({ versionId: view.versionId, fileId: view.fileId, text, timecode: tc })
+    });
+    curDetail.comments.push(j.comment);
+    const f = curDetail.version.files.find(x=>x.id===view.fileId);
+    f.commentCount = (f.commentCount||0)+1;
+    toast('评论已发表');
+    renderFile();
+  }catch(e){ toast(e.message); }
+}
+
+function addTcComment(){
+  if (!videoEl) return;
+  const text = document.getElementById('commentText').value.trim();
+  if(!text) return toast('先在输入框里写好评论内容');
+  addComment(Math.floor(videoEl.currentTime*10)/10);
+}
+
+async function mark(status){
+  try{
+    const j = await api('/api/review/mark', {
+      method:'POST', headers:{'content-type':'application/json'},
+      body: JSON.stringify({ versionId: view.versionId, fileId: view.fileId, status })
+    });
+    curDetail.version = j.version;
+    document.getElementById('myMark').textContent = '我的标记：' + (status==='approved'?'✓ 审核通过':'✗ 需要修改');
+    toast(status==='approved'?'已标记「审核通过」':'已标记「需要修改」');
+  }catch(e){ toast(e.message); }
+}
+
+/* 每 10 秒刷新任务列表（新提交会自动出现） */
+setInterval(()=>{ if(view.name==='tasks') renderTasks(); }, 10000);
+renderTasks();
+</script>
+</body>
+</html>

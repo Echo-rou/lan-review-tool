@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>连接审核设备</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:#f4f5f7; color:#1f2329; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .card { background:#fff; border-radius:16px; padding:28px 24px; width:100%; max-width:400px; box-shadow:0 4px 20px rgba(0,0,0,.08); }
+  h1 { font-size:19px; text-align:center; margin-bottom:6px; }
+  .sub { text-align:center; color:#8a8f99; font-size:13px; margin-bottom:22px; line-height:1.7; }
+  label { font-size:13px; color:#555; display:block; margin:14px 0 6px; }
+  input { width:100%; padding:12px 14px; border:1.5px solid #d9d9d9; border-radius:10px; font-size:16px; outline:none; }
+  input:focus { border-color:#2f54eb; }
+  #codeInput { text-align:center; letter-spacing:6px; font-size:24px; font-family:ui-monospace,Menlo,monospace; }
+  button { width:100%; margin-top:20px; padding:13px; border:none; border-radius:10px; background:#2f54eb; color:#fff; font-size:16px; cursor:pointer; }
+  button:disabled { background:#a6b7f5; }
+  .err { background:#fff1f0; border:1px solid #ffa39e; color:#cf1322; border-radius:8px; padding:10px 12px; font-size:13px; margin-top:14px; display:none; }
+  .wait { text-align:center; padding:30px 0 10px; }
+  .spinner { width:36px; height:36px; border:3.5px solid #e0e5f5; border-top-color:#2f54eb; border-radius:50%; margin:0 auto 16px; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="card" id="formCard">
+  <h1>🔗 连接审核设备</h1>
+  <div class="sub">把这台设备连接到创作者的电脑<br>配对码显示在创作者电脑页面的「连接设备」区域</div>
+  <label>这台设备叫什么？（如：导演的手机、客户的笔记本）</label>
+  <input id="nameInput" placeholder="设备名称" maxlength="30">
+  <label>6 位配对码</label>
+  <input id="codeInput" placeholder="——————" maxlength="6" inputmode="numeric">
+  <button id="joinBtn" onclick="doJoin()">请求连接</button>
+  <div class="err" id="errBox"></div>
+</div>
+
+<div class="card" id="waitCard" style="display:none">
+  <div class="wait">
+    <div class="spinner"></div>
+    <h1>等待创作者确认…</h1>
+    <div class="sub" style="margin-top:10px">请创作者在他/她的电脑页面上点击「授权」<br>授权后这里会自动进入审核页面</div>
+  </div>
+</div>
+
+<script>
+let deviceId = null;
+function showErr(msg){ const e=document.getElementById('errBox'); e.textContent=msg; e.style.display='block'; }
+
+// 如果之前已经授权过，直接进审核页
+const savedToken = localStorage.getItem('reviewToken');
+if (savedToken) {
+  fetch('/api/review/me', { headers: { 'x-device-token': savedToken } })
+    .then(r => { if (r.ok) location.href = '/review'; else localStorage.removeItem('reviewToken'); })
+    .catch(()=>{});
+}
+
+async function doJoin(){
+  const name = document.getElementById('nameInput').value.trim();
+  const code = document.getElementById('codeInput').value.trim();
+  if(!name) return showErr('请先给这台设备起个名字');
+  if(!/^\d{6}$/.test(code)) return showErr('配对码是创作者页面上显示的 6 位数字');
+  document.getElementById('joinBtn').disabled = true;
+  try{
+    const r = await fetch('/api/join',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name,code})});
+    const j = await r.json();
+    if(!r.ok){ showErr(j.error||'连接失败'); document.getElementById('joinBtn').disabled=false; return; }
+    deviceId = j.deviceId;
+    localStorage.setItem('joinDeviceId', deviceId);
+    document.getElementById('formCard').style.display='none';
+    document.getElementById('waitCard').style.display='block';
+    poll();
+  }catch(e){ showErr('网络错误：'+e.message); document.getElementById('joinBtn').disabled=false; }
+}
+
+async function poll(){
+  try{
+    const r = await fetch('/api/join/status?deviceId='+encodeURIComponent(deviceId));
+    const j = await r.json();
+    if(r.status===404){ localStorage.removeItem('joinDeviceId'); location.reload(); return; }
+    if(j.status==='approved'){
+      localStorage.setItem('reviewToken', j.token);
+      localStorage.removeItem('joinDeviceId');
+      location.href = '/review';
+      return;
+    }
+  }catch(e){ /* 继续等 */ }
+  setTimeout(poll, 2000);
+}
+
+// 刷新页面后若还在等待授权，恢复等待状态
+const pendingId = localStorage.getItem('joinDeviceId');
+if (pendingId && !savedToken) {
+  deviceId = pendingId;
+  document.getElementById('formCard').style.display='none';
+  document.getElementById('waitCard').style.display='block';
+  poll();
+}
+</script>
+</body>
+</html>

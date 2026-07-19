@@ -1,0 +1,12 @@
+# node_modules 体积巨大，记录在 package.json 里即可，clone 后 npm install 还原
+server/node_modules/
+receiver/node_modules/
+
+# 运行时数据（用户的工作区选择、接收端配对记录、交付记录）
+server/data/
+receiver/data/
+
+# 系统杂物
+.DS_Store
+Thumbs.db
+*.log

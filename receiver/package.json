@@ -1,0 +1,10 @@
+{
+  "name": "lan-review-receiver",
+  "version": "1.0.0",
+  "private": true,
+  "description": "局域网提审、审核与交付工具 - 接收端",
+  "main": "src/receiver.js",
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
